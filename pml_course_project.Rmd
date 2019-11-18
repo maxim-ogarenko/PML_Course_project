@@ -1,0 +1,131 @@
+---
+title: "quiz 4"
+author: "maxim"
+date: '24 сентября 2019 г '
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(dplyr)
+library(caret)
+library(rpart)
+library(rattle)
+
+#library(AppliedPredictiveModeling)
+#library(ElemStatLearn)
+#library(pgmm)
+
+#library(gbm)
+#library(forecast)
+#library(e1071)
+#library(elasticnet)
+```
+
+#The goal of your project 
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+#Deliverable 
+To predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. 
+
+You should create a report describing 
+- how you built your model,  
+- how you used cross validation,  
+- what you think the expected out of sample error is,  
+- why you made the choices you did. 
+
+You will also use your prediction model to predict 20 different test cases.
+
+# Read the data
+```{r read data}
+training <- read.csv("pml-training.csv", 
+                     header = T, 
+                     na.strings = c("NA","#DIV/0!",""))
+
+testing <- read.csv("pml-testing.csv", 
+                    header = T, 
+                    na.strings=c("NA","#DIV/0!",""))
+
+dim(training)
+dim(testing)
+```
+
+# Clean the data
+Remove variables that have more than 20% missing values, or are not relevant to prediction  
+```{r remove NA and unrelevant cols}
+training <- training[ , colSums(is.na(training)) <= nrow(training) * 0.2]
+
+training <- training %>% 
+        select(-X, -user_name, -raw_timestamp_part_1, -raw_timestamp_part_2,
+               -cvtd_timestamp, -new_window, -num_window)
+ncol(training)
+```
+
+# Check if there are any variables with near-zero variability
+```{r find near 0 vars}
+nearZeroVar(training)
+```
+
+# Remove highly correlated variables
+```{r remove hi-corr vars}
+cor_data <- training %>% select(-classe) %>% cor
+removecor <- findCorrelation(cor_data, cutoff = .90, verbose = TRUE)
+training <- training %>% select(-removecor)
+ncol(training)
+```
+
+
+#Split data to training and testing for cross validation
+```{r split}
+in_train <- createDataPartition(y = training$classe, p=0.7, list=FALSE)
+training_data <- training[in_train, ]
+testing_data <- training[-in_train, ]
+
+dim(training_data)
+dim(testing_data)
+```
+
+#Analysis
+
+##rpart model
+```{r rpart}
+rpart_model <- train(classe ~ ., method = "rpart", data = training_data)
+rpart_model$finalModel
+fancyRpartPlot(rpart_model$finalModel)
+```
+
+##Cross Validation: rpart model
+I am going to check the performance of the rpart model on the testing data by cross validation.
+```{r cross valid'n}
+rpart_pred <- predict(rpart_model, testing_data)
+sum(rpart_pred == testing_data$classe) / length(rpart_pred) # error rate
+```
+The error rate of the rpart model is too high.
+
+## random forest model
+I am going tio apply random forest model.
+```{r}
+model_rf <- train(classe ~ ., data = training_data, method = "rf")
+predict_rf <- predict(model_rf, newdata = testing_data)
+```
+
+##Cross Validation: random forest model
+```{r}
+cm_rf <- confusionMatrix(predict_rf, testing_data$classe)
+cm_rf$overall
+```
+
+# Error
+The model provides an accuracy of 99.5%/ This figure is an estimate of the out of sample error. 
+
+
+# Apply to final test set
+Finally, I apply the random forest model to the final test data.
+```{r}
+predict_20 <- predict(model_rf, newdata = testing)
+predict_20
+```
+
